@@ -1,0 +1,58 @@
+ У вас есть таблица StockQuotes(company TEXT, week INT, share_price INT). Строка в этой таблице говорит о том, что стоимость акции компании company в неделю номер week составляла share_price.
+
+Назовём индексом в данную неделю среднее арифметическое роста стоимости одной акции по всем компаниям сравнительно с предыдущей неделей. То есть, если одна акция компании A подорожала на 100 единиц, а акция компании B подешевела на 50 единиц, то индекс равен 25.
+
+Назовём компанию успешной на этой неделе, если изменение стоимости одной её акции было выше индекса. "Изменение D выше индекса I" означает "D > I" как вещественное число.
+
+Если компания была успешной три недели подряд то будем говорить, что она сделала успешную серию. Успешные серии могут пересекаться. Так, если компания была успешной 5 недель подряд, то у неё было 3 успешных серии.
+
+Вам нужно посчитать для каждой компании количество успешных серий и вывести в результат два столбца. В первом столбце с типом TEXT должно быть название компании, а во втором с типом BIGINT количество её успешных серий. 
+
+Решение
+
+WITH
+WeeklyAverageSharePrice AS (
+    SELECT week, AVG(share_price) as avg_price
+    FROM StockQuotes
+    GROUP BY week
+    ORDER BY week ASC
+),
+WeeklyIndex AS (
+    SELECT week, 
+           avg_price - FIRST_VALUE(avg_price) OVER PreviousWeek as weekly_index
+    FROM WeeklyAverageSharePrice
+    WINDOW
+    PreviousWeek AS (
+        ORDER BY week ASC
+        ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
+    )
+),
+CompanyIndex AS (
+    SELECT company, week, 
+           share_price - FIRST_VALUE(share_price) OVER PreviousWeek as company_index
+    FROM StockQuotes
+    WINDOW
+    PreviousWeek AS (
+        PARTITION BY company ORDER BY week ASC
+        ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
+    )
+),
+CompanyWeekSuccess AS (
+    SELECT ci.company as company, 
+           wi.week as week,
+           (CASE WHEN ci.company_index > wi.weekly_index THEN TRUE ELSE FALSE END) as successful
+    FROM CompanyIndex ci JOIN WeeklyIndex wi ON ci.week = wi.week
+),
+CompanySuccessOverLastThreeWeeks AS (
+    SELECT company, week,
+           (CASE WHEN (SUM(CASE WHEN successful = TRUE THEN 1 ELSE 0 END) OVER LastThreeWeeks) = 3 THEN TRUE ELSE FALSE END) as three_weeks_success
+    FROM CompanyWeekSuccess
+    WINDOW 
+    LastThreeWeeks AS (
+        PARTITION BY company ORDER BY week ASC
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    )
+)
+SELECT company, SUM(CASE WHEN three_weeks_success = TRUE THEN 1 ELSE 0 END)
+FROM CompanySuccessOverLastThreeWeeks
+GROUP BY company;

@@ -1,0 +1,50 @@
+Реализовать процедуру, которая ставит флажок о принятии или не принятии статьи на конференцию в зависимости от оценок, поставленных рецензентами.
+
+Поведение хранимой процедуры
+
+Процедура должна обновить запись о рецензировании, если таковая имеется, и записать туда оценку, если этому не препятствуют описанные далее ограничения. Кроме этого, если для статьи получено три оценки, то процедура должна в момент получения третьей оценки записать в атрибут Paper.accepted посчитанное значение. Это значение должно быть TRUE, если среднее арифметическое оценок больше 4, и  FALSE в противном случае.
+
+Процедура должна завершиться успешно только в том случае, если она выполнила необходимые действия. Если действие выполнить невозможно по причине некорректности данных или по еще какой-нибудь причине, процедура должна выкинуть исключение с кодом 'DB017'.
+
+Ограничения
+
+    Оценками могут быть целые числа в диапазоне [1..7]
+    Единожды поставленное значение решения о принятии или отклонении статьи и оценки рецензентов, на основании  которых решение было поставлено, не должны меняться.
+    Добавлять новые записи о рецензировании не нужно.
+
+Решение
+
+BEGIN
+  IF _score NOT IN (1, 2, 3, 4, 5, 6, 7) THEN
+    RAISE SQLSTATE 'DB017';
+  END IF;
+  IF (SELECT accepted FROM Paper WHERE id = _paper_id) IS NOT NULL THEN
+    RAISE SQLSTATE 'DB017';
+  END IF;
+  
+  UPDATE PaperReviewing
+  SET score = _score
+  WHERE paper_id = _paper_id AND reviewer_id = _reviewer_id;
+  IF NOT found THEN 
+    RAISE SQLSTATE 'DB017';
+  END IF;
+  IF (
+      SELECT SUM(CASE WHEN score IS NULL THEN 0 ELSE 1 END)
+      FROM PaperReviewing JOIN Paper ON PaperReviewing.paper_id = Paper.id
+      WHERE Paper.id = _paper_id) = 3 THEN
+    IF (
+        SELECT AVG(score)
+        FROM PaperReviewing JOIN Paper ON PaperReviewing.paper_id = Paper.id
+        WHERE Paper.id = _paper_id) > 4 THEN
+      UPDATE Paper
+      SET accepted = TRUE
+      WHERE id = _paper_id;
+    ELSE
+      UPDATE Paper
+      SET accepted = FALSE
+      WHERE id = _paper_id;
+    END IF;
+  END IF;
+  
+  
+END;

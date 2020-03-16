@@ -1,0 +1,26 @@
+Напишите запрос, считающий в дереве, хранимом в виде списков смежностей, для каждой вершины размер её поддерева.
+
+CREATE TABLE Keyword(
+  id INT PRIMARY KEY, 
+  value TEXT, -- некое значение, не имеющее смысла для целей этой задачи
+  parent_id INT REFERENCES Keyword DEFAULT NULL);
+
+Для каждой вершины вычислить размер возглавляемого ей поддерева, включая саму вершину.
+
+Решение
+
+WITH RECURSIVE Subtrees (id, subtree) AS (
+  SELECT id, ARRAY[id] 
+  FROM Keyword kw 
+  WHERE kw.parent_id IS NULL
+    
+  UNION ALL
+    
+  SELECT kw.id, s.subtree || kw.id 
+  FROM Subtrees as s, Keyword as kw
+  WHERE kw.parent_id = s.id
+)
+
+SELECT kw.id, COUNT(*)
+FROM Keyword kw INNER JOIN Subtrees st ON kw.id = ANY(st.subtree)
+GROUP BY kw.id;
